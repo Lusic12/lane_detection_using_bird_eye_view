@@ -4,6 +4,7 @@ from scipy import signal
 
 
 
+
 def lane_histogram(img, height_start, height_end):
     histogram = np.sum(img[int(height_start):int(height_end),:], axis=0)
     return histogram
@@ -19,6 +20,10 @@ def calc_fit_from_boxes(boxes,old_fit):
         return np.polyfit(ys, xs, 2)
     else:
         return old_fit
+
+
+
+
 
 
 
@@ -55,23 +60,9 @@ def find_lane_windows(window_box, binimg):
     return boxes
 
 def lane_peaks(histogram):
-    peaks = signal.find_peaks_cwt(histogram, np.arange(1, 150), min_length=50)
+    peaks = signal.find_peaks_cwt(histogram, np.arange(1, 150), min_length=100)
 
-    midpoint = int(histogram.shape[0] / 2)
-    # if we found at least two peaks use the signal approach (better in shadows)
-    if len(peaks) > 1:
-        # in case more then 2 found just get the left and right one
-        peak_left, *_, peak_right = peaks
-
-    # otherwise just choose the highest points in left and right of center segments
-    else:
-
-        peak_left = np.argmax(histogram[:midpoint])
-        peak_right = np.argmax(histogram[midpoint:]) + midpoint
-
-
-    return peak_left, peak_right
-
+    return peaks
 def poly_fitx(fity, line_fit):
     fit_linex = line_fit[0]*fity**2 + line_fit[1]*fity + line_fit[2]
     return fit_linex
@@ -103,8 +94,7 @@ def calc_curvature(poly, height=140):
 
     return curveradm
 
-
-def fit_window(binimg, poly, margin=60):
+def fit_window(binimg, poly, margin=20):
     height = binimg.shape[0]
     y = binimg.shape[0]
 
@@ -125,65 +115,30 @@ def fit_window(binimg, poly, margin=60):
         return np.polyfit(fity, xs, 2)
 
     return fit(window_lane(poly))
-def calc_lr_fit_from_polys(binimg, left_fit, right_fit, margin):
+def calc_lr_fit_from_polys(binimg, line, margin):
     nonzero = binimg.nonzero()
     nonzeroy = np.array(nonzero[0])
     nonzerox = np.array(nonzero[1])
 
     def window_lane(poly):
+        if poly is None:
+            return None
         return (
-                (nonzerox > (poly[0] * (nonzeroy ** 2) + poly[1] * nonzeroy + poly[2] - margin))
-                & (nonzerox < (poly[0] * (nonzeroy ** 2) + poly[1] * nonzeroy + poly[2] + margin))
+            (nonzerox > (poly[0] * (nonzeroy ** 2) + poly[1] * nonzeroy + poly[2] - margin))
+            & (nonzerox < (poly[0] * (nonzeroy ** 2) + poly[1] * nonzeroy + poly[2] + margin))
         )
 
-    def window_polyfit(lane_inds,state_xs,state_ys):
+    def window_polyfit(lane_inds):
+        if len(lane_inds) == 0:
+            return None
         xs = nonzerox[lane_inds]
-        if len(xs) ==0:
-            xs=state_xs
         ys = nonzeroy[lane_inds]
-        if len(ys) ==0:
-            ys=state_ys
+        # Tránh trường hợp chia cho 0
+        if len(ys) == 0:
+            return None
         # return the polynominal
         return np.polyfit(ys, xs, 2)
 
+    new_line = window_polyfit(window_lane(line))
 
-    new_right_fit = right_fit
-    if right_fit is not None:
-        ys = np.random.uniform(0, 360, 2000)
-        xs = np.linspace(230, 240, 2000)
-
-        new_right_fit = window_polyfit(window_lane(right_fit),xs,ys)
-
-    new_left_fit = left_fit
-    if left_fit is not None:
-        # Nội suy lane nếu left_fit không None
-        ys = np.random.uniform(0, 360, 7000)
-        xs = np.linspace(0, 10, 7000)
-        new_left_fit = window_polyfit(window_lane(left_fit),xs,ys)
-
-
-
-    # Assuming 'frame' is your image frame
-    frame_test = np.zeros((360, 640, 3), dtype=np.uint8)  # Creating a blank frame for demonstration
-    # Generate y values for the left lane
-    left_y_values = np.linspace(0, frame_test.shape[0] - 1, frame_test.shape[0])
-    left_x_values = np.polyval(new_left_fit, left_y_values)
-
-    # Generate y values for the right lane
-    right_y_values = np.linspace(0, frame_test.shape[0] - 1, frame_test.shape[0])
-    right_x_values = np.polyval(new_right_fit, right_y_values)
-    # Convert x and y values to integer for drawing
-    left_points = np.column_stack((left_x_values.astype(int), left_y_values.astype(int)))
-
-    right_points = np.column_stack((right_x_values.astype(int), right_y_values.astype(int)))
-    # Draw circles at each point
-    for point in left_points:
-        cv2.circle(frame_test, tuple(point), 3, (255, 255, 0), -1)  # -1 indicates filled circle
-
-    for point in right_points:
-        cv2.circle(frame_test, tuple(point), 3, (0, 255, 0), -1)  # -1 indicates filled circle
-
-    # Show or save the frame as needed
-    cv2.imshow('Lane Detection_test', frame_test)
-
-    return (new_left_fit, new_right_fit)
+    return (new_line)

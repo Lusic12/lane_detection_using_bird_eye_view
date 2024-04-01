@@ -110,12 +110,10 @@ def binary_filter_road_pavement(img):
 
     # calculating object histogram
     roihist = cv2.calcHist([roi_hsv], [0, 1], None, [256, 256], [0, 256, 0, 256])
-    # roihist = cv2.calcHist([roi_hsv],[0], None, [256], [0, 256] )
 
     # normalize histogram and apply backprojection
     cv2.normalize(roihist, roihist, 0, 255, cv2.NORM_MINMAX)
     dst = cv2.calcBackProject([img_hsv], [0, 1], roihist, [0, 256, 0, 256], 1)
-    #     dst = cv2.calcBackProject([img_hsv],[0],roihist,[0,256],1)
 
     # Now convolute with circular disc
     disc = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
